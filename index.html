@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>マルチレシートメーカー Pro - 画像ズレ補正版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=M+PLUS+1+Code:wght@400;700&display=swap');
+
+        :root {
+            --receipt-width: 320px;
+        }
+
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background-color: #f0f2f5;
+            color: #1f2937;
+            touch-action: manipulation;
+        }
+
+        /* レシートプレビューの基本スタイル */
+        .receipt-container {
+            width: var(--receipt-width);
+            background: white;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1);
+            color: #000;
+            font-family: 'M PLUS 1 Code', 'Noto Sans JP', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            margin: 0 auto;
+            /* 画像書き出し時の文字ズレ防止用 */
+            word-break: break-all;
+            letter-spacing: 0.02em;
+        }
+
+        /* 文字ズレを防ぐためのフレックス行の固定 */
+        .flex-row-receipt {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            min-height: 1.5em;
+        }
+
+        #viewLogoImg {
+            max-width: 200px;
+            max-height: 80px;
+            object-fit: contain;
+            margin-bottom: 12px;
+            filter: grayscale(1) contrast(2);
+        }
+
+        .dotted-border {
+            border-top: 1px dashed #000;
+            margin: 8px 0;
+            height: 1px;
+        }
+
+        /* セブン-イレブン風 */
+        .style-seven .receipt-title-box {
+            border: 1px solid #000;
+            padding: 2px 20px;
+            display: inline-block;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+
+        /* マクドナルド風 */
+        .style-mcd .order-number {
+            font-size: 50px;
+            font-weight: bold;
+            background: #000;
+            color: #fff;
+            padding: 8px;
+            text-align: center;
+            margin: 10px 0;
+        }
+
+        input, select, textarea {
+            font-size: 16px !important;
+        }
+
+        .sticky-preview {
+            position: sticky;
+            top: 1rem;
+        }
+
+        @media (max-width: 1024px) {
+            .sticky-preview {
+                position: static;
+            }
+        }
+
+        /* 保存用に出力された画像のコンテナ */
+        #generatedImageContainer img {
+            max-width: 100%;
+            height: auto;
+            border: 4px solid white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+    </style>
+</head>
+<body class="pb-20">
+    <div class="max-w-6xl mx-auto p-4 flex flex-col lg:flex-row gap-6">
+        
+        <!-- 左側：設定パネル -->
+        <div class="flex-1 space-y-6">
+            <header class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
+                <h1 class="text-xl font-bold flex items-center gap-2 text-gray-800">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-600"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1-2-1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5V19"/><path d="M12 5v1.5"/></svg>
+                    レシートメーカー Pro
+                </h1>
+            </header>
+
+            <section class="bg-white p-4 rounded-2xl shadow-sm border border-gray-200">
+                <label class="block text-sm font-bold text-gray-600 mb-3">デザイン選択</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <button onclick="setStyle('style-seven')" class="bg-gray-50 hover:bg-blue-50 py-3 rounded-xl text-xs font-bold border border-gray-200 transition-colors">セブン風</button>
+                    <button onclick="setStyle('style-famima')" class="bg-gray-50 hover:bg-blue-50 py-3 rounded-xl text-xs font-bold border border-gray-200 transition-colors">ファミマ風</button>
+                    <button onclick="setStyle('style-mcd')" class="bg-gray-50 hover:bg-blue-50 py-3 rounded-xl text-xs font-bold border border-gray-200 transition-colors">マック風</button>
+                </div>
+            </section>
+
+            <section class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
+                <label class="block text-sm font-bold text-gray-600">ロゴ・店舗情報</label>
+                <div class="flex flex-col gap-2 p-4 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+                    <input type="file" id="logoInput" accept="image/*" onchange="handleLogo(event)" class="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer w-full">
+                    <button onclick="removeLogo()" class="text-[10px] text-red-500 font-bold mt-1 text-left">ロゴを削除する</button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <input type="text" id="shopName" value="セブン-イレブン" class="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" oninput="update()">
+                    <input type="text" id="branchName" value="千代田店" class="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" oninput="update()">
+                </div>
+                <input type="text" id="address" value="東京都千代田区二番町８ー８" class="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" oninput="update()">
+            </section>
+
+            <section class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
+                <div class="flex items-center justify-between">
+                    <label class="block text-sm font-bold text-gray-600">商品リスト</label>
+                    <button onclick="addItem()" class="bg-blue-50 text-blue-600 px-4 py-2 rounded-lg text-xs font-bold">+ 商品追加</button>
+                </div>
+                <div id="itemList" class="space-y-3"></div>
+            </section>
+
+            <section class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
+                <label class="block text-sm font-bold text-gray-600">フッター・その他</label>
+                <div>
+                    <span class="text-[10px] font-bold text-gray-400">Footer Message</span>
+                    <textarea id="footerMsg" class="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" oninput="update()" rows="2">ご来店ありがとうございました。</textarea>
+                </div>
+            </section>
+        </div>
+
+        <!-- 右側：プレビュー固定エリア -->
+        <div class="w-full lg:w-[360px]">
+            <div class="sticky-preview flex flex-col items-center gap-6">
+                
+                <!-- レシートプレビュー本体 -->
+                <div id="receipt" class="receipt-container style-seven">
+                    <div class="text-center">
+                        <div id="logoWrapper" class="flex flex-col items-center justify-center">
+                            <img id="viewLogoImg" class="hidden">
+                        </div>
+                        <div id="viewShopName" class="text-lg font-bold"></div>
+                        <div id="viewBranchName" class="text-sm"></div>
+                        <div id="viewAddress" class="text-[10px] mt-1 leading-tight px-4 whitespace-pre-wrap"></div>
+                        <div class="flex justify-between mt-3 px-1 text-[11px]">
+                            <span id="viewTel">電話：03-1234-5678</span>
+                            <span id="viewReg">レジ #1</span>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between px-1 mt-2 text-[11px]">
+                        <span id="viewTimestamp"></span>
+                        <span>責: 001</span>
+                    </div>
+
+                    <div class="text-center">
+                        <div id="viewTitle" class="receipt-title-box">領　収　書</div>
+                    </div>
+
+                    <div id="viewItems" class="mt-2 space-y-0.5"></div>
+                    <div class="dotted-border"></div>
+
+                    <div id="viewSummary" class="text-[12px] space-y-0.5"></div>
+
+                    <div class="flex justify-between text-2xl font-bold border-b-2 border-black mt-2 pb-1">
+                        <span>合　計</span>
+                        <span id="viewTotal">¥0</span>
+                    </div>
+
+                    <div id="viewBreakdown" class="mt-2 text-[10px] leading-tight text-gray-700"></div>
+
+                    <div id="mcdOrderSection" class="hidden">
+                        <div class="dotted-border"></div>
+                        <div class="text-[10px] text-center">受付番号</div>
+                        <div class="order-number">128</div>
+                    </div>
+
+                    <div id="viewFooterMsg" class="mt-4 text-[10px] text-center text-gray-700 whitespace-pre-wrap leading-relaxed"></div>
+
+                    <div id="barcodeSection" class="mt-6 flex flex-col items-center">
+                        <svg id="barcodeImage"></svg>
+                    </div>
+
+                    <div class="mt-4 border-t border-dotted border-gray-300"></div>
+                </div>
+
+                <div class="w-full space-y-3 px-4 lg:px-0">
+                    <button onclick="saveImage()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                        レシートを画像で保存
+                    </button>
+                    <div id="imageOutput" class="w-full"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStyle = 'style-seven';
+        let items = [
+            { name: 'おにぎり（鮭）', price: 150, qty: 1, tax: 8 },
+            { name: 'カフェラテ', price: 180, qty: 1, tax: 8 },
+            { name: 'レジ袋', price: 3, qty: 1, tax: 10 }
+        ];
+
+        function handleLogo(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = document.getElementById('viewLogoImg');
+                    img.src = e.target.result;
+                    img.classList.remove('hidden');
+                    update();
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function removeLogo() {
+            const img = document.getElementById('viewLogoImg');
+            img.src = "";
+            img.classList.add('hidden');
+            document.getElementById('logoInput').value = "";
+            update();
+        }
+
+        function setStyle(s) {
+            currentStyle = s;
+            document.getElementById('receipt').className = `receipt-container ${s}`;
+            update();
+        }
+
+        function addItem() {
+            items.push({ name: '新商品', price: 100, qty: 1, tax: 8 });
+            renderInputs();
+            update();
+        }
+
+        function removeItem(i) {
+            items.splice(i, 1);
+            renderInputs();
+            update();
+        }
+
+        function renderInputs() {
+            const list = document.getElementById('itemList');
+            list.innerHTML = '';
+            items.forEach((item, i) => {
+                const div = document.createElement('div');
+                div.className = 'bg-gray-50 p-4 rounded-xl border border-gray-100 shadow-sm space-y-2';
+                div.innerHTML = `
+                    <div class="flex gap-2">
+                        <input type="text" value="${item.name}" class="flex-1 p-2 text-sm border rounded-lg" oninput="items[${i}].name=this.value;update()">
+                        <button onclick="removeItem(${i})" class="text-red-500 bg-red-50 px-3 rounded-lg">×</button>
+                    </div>
+                    <div class="flex gap-2">
+                        <input type="number" value="${item.price}" class="w-full p-2 text-sm border rounded-lg text-right" oninput="items[${i}].price=Number(this.value);update()">
+                        <select class="w-full p-2 text-sm border rounded-lg bg-white" onchange="items[${i}].tax=Number(this.value);update()">
+                            <option value="8" ${item.tax==8?'selected':''}>8%</option>
+                            <option value="10" ${item.tax==10?'selected':''}>10%</option>
+                        </select>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function update() {
+            document.getElementById('viewShopName').innerText = document.getElementById('shopName').value;
+            document.getElementById('viewBranchName').innerText = document.getElementById('branchName').value;
+            document.getElementById('viewAddress').innerText = document.getElementById('address').value;
+            
+            const footerText = document.getElementById('footerMsg').value;
+            const footerEl = document.getElementById('viewFooterMsg');
+            footerEl.innerText = footerText;
+            footerEl.style.display = footerText.trim() === "" ? "none" : "block";
+
+            const itemsDiv = document.getElementById('viewItems');
+            itemsDiv.innerHTML = '';
+            let sub8 = 0, sub10 = 0;
+            
+            items.forEach(item => {
+                const line = document.createElement('div');
+                line.className = 'flex-row-receipt px-1';
+                const mark = item.tax == 8 ? '*' : '';
+                line.innerHTML = `<span>${mark}${item.name}</span><span>¥${item.price.toLocaleString()}</span>`;
+                itemsDiv.appendChild(line);
+
+                if (item.tax == 8) sub8 += item.price;
+                else sub10 += item.price;
+            });
+
+            const tax8 = Math.floor(sub8 * 8 / 108);
+            const tax10 = Math.floor(sub10 * 10 / 110);
+            const total = sub8 + sub10;
+
+            document.getElementById('viewSummary').innerHTML = `
+                <div class="flex-row-receipt px-1 text-gray-500"><span>内消費税(8%)</span><span>¥${tax8.toLocaleString()}</span></div>
+                <div class="flex-row-receipt px-1 text-gray-500"><span>内消費税(10%)</span><span>¥${tax10.toLocaleString()}</span></div>
+            `;
+            document.getElementById('viewTotal').innerText = `¥ ${total.toLocaleString()}`;
+            
+            document.getElementById('mcdOrderSection').classList.toggle('hidden', currentStyle !== 'style-mcd');
+            
+            try {
+                JsBarcode("#barcodeImage", "2101234567890", {
+                    format: "CODE128",
+                    displayValue: true,
+                    height: 40,
+                    width: 1.5,
+                    margin: 0,
+                    background: "transparent"
+                });
+            } catch(e) {}
+        }
+
+        async function saveImage() {
+            const target = document.getElementById('receipt');
+            const output = document.getElementById('imageOutput');
+            output.innerHTML = '<p class="text-center text-xs text-gray-400 animate-pulse">高品質画像を生成中...</p>';
+            
+            // フォントの読み込みを確実に待つ
+            if (document.fonts) {
+                await document.fonts.ready;
+            }
+
+            try {
+                const canvas = await html2canvas(target, { 
+                    scale: 3, // 解像度を上げて文字のガタつきを防止
+                    useCORS: true,
+                    backgroundColor: "#ffffff",
+                    logging: false,
+                    // 文字ズレ補正のためのオプション
+                    letterRendering: true,
+                    allowTaint: true,
+                    onclone: (clonedDoc) => {
+                        // クローンされた要素で微調整が必要な場合はここで行う
+                        const clonedReceipt = clonedDoc.getElementById('receipt');
+                        clonedReceipt.style.boxShadow = 'none';
+                    }
+                });
+                
+                const data = canvas.toDataURL('image/png');
+                output.innerHTML = `
+                    <div id="generatedImageContainer" class="bg-white p-2 rounded-xl border border-gray-200 mt-4 text-center">
+                        <p class="text-[10px] font-bold text-blue-500 mb-2">生成完了 (長押しで保存)</p>
+                        <img src="${data}" class="inline-block">
+                        <button onclick="downloadDirectly('${data}')" class="mt-2 block w-full text-[10px] text-gray-400 underline">直接ダウンロードを試みる</button>
+                    </div>
+                `;
+            } catch (err) {
+                console.error(err);
+                output.innerHTML = '<p class="text-center text-xs text-red-500">画像生成に失敗しました</p>';
+            }
+        }
+
+        function downloadDirectly(data) {
+            const link = document.createElement('a');
+            link.download = `receipt_${Date.now()}.png`;
+            link.href = data;
+            link.click();
+        }
+
+        window.onload = () => {
+            const now = new Date();
+            const ts = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+            document.getElementById('viewTimestamp').innerText = ts;
+            renderInputs();
+            update();
+        };
+    </script>
+</body>
+</html>
