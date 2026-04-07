@@ -3,10 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>マルチレシートメーカー Pro - 画像ズレ補正版</title>
+    <title>マルチレシートメーカー Pro - バーコード・QRカスタム版</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
+    <!-- QRコード生成ライブラリを追加 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&family=M+PLUS+1+Code:wght@400;700&display=swap');
 
@@ -21,7 +23,6 @@
             touch-action: manipulation;
         }
 
-        /* レシートプレビューの基本スタイル */
         .receipt-container {
             width: var(--receipt-width);
             background: white;
@@ -32,12 +33,12 @@
             font-size: 13px;
             line-height: 1.5;
             margin: 0 auto;
-            /* 画像書き出し時の文字ズレ防止用 */
             word-break: break-all;
             letter-spacing: 0.02em;
+            position: relative;
+            box-sizing: border-box;
         }
 
-        /* 文字ズレを防ぐためのフレックス行の固定 */
         .flex-row-receipt {
             display: flex;
             justify-content: space-between;
@@ -59,7 +60,6 @@
             height: 1px;
         }
 
-        /* セブン-イレブン風 */
         .style-seven .receipt-title-box {
             border: 1px solid #000;
             padding: 2px 20px;
@@ -68,7 +68,6 @@
             font-weight: bold;
         }
 
-        /* マクドナルド風 */
         .style-mcd .order-number {
             font-size: 50px;
             font-weight: bold;
@@ -94,13 +93,17 @@
             }
         }
 
-        /* 保存用に出力された画像のコンテナ */
         #generatedImageContainer img {
             max-width: 100%;
             height: auto;
             border: 4px solid white;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        /* QRコードのコンテナ調整 */
+        #qrcodeImage img {
+            display: inline-block !important;
         }
     </style>
 </head>
@@ -116,6 +119,7 @@
                 </h1>
             </header>
 
+            <!-- デザイン -->
             <section class="bg-white p-4 rounded-2xl shadow-sm border border-gray-200">
                 <label class="block text-sm font-bold text-gray-600 mb-3">デザイン選択</label>
                 <div class="grid grid-cols-3 gap-2">
@@ -125,19 +129,32 @@
                 </div>
             </section>
 
+            <!-- 店舗・基本情報 -->
             <section class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
-                <label class="block text-sm font-bold text-gray-600">ロゴ・店舗情報</label>
+                <label class="block text-sm font-bold text-gray-600">店舗・基本情報</label>
                 <div class="flex flex-col gap-2 p-4 bg-gray-50 rounded-xl border border-dashed border-gray-300">
                     <input type="file" id="logoInput" accept="image/*" onchange="handleLogo(event)" class="text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer w-full">
                     <button onclick="removeLogo()" class="text-[10px] text-red-500 font-bold mt-1 text-left">ロゴを削除する</button>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <input type="text" id="shopName" value="セブン-イレブン" class="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" oninput="update()">
-                    <input type="text" id="branchName" value="千代田店" class="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" oninput="update()">
+                    <input type="text" id="shopName" value="セブン-イレブン" class="w-full border-gray-200 border rounded-xl p-3 text-sm" oninput="update()" placeholder="店舗名">
+                    <input type="text" id="branchName" value="千代田店" class="w-full border-gray-200 border rounded-xl p-3 text-sm" oninput="update()" placeholder="支店名">
                 </div>
-                <input type="text" id="address" value="東京都千代田区二番町８ー８" class="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" oninput="update()">
+                <input type="text" id="address" value="東京都千代田区二番町８ー８" class="w-full border-gray-200 border rounded-xl p-3 text-sm" oninput="update()" placeholder="住所">
+                
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <span class="text-[10px] font-bold text-gray-400">電話番号</span>
+                        <input type="text" id="telNumber" value="03-1234-5678" class="w-full border-gray-200 border rounded-xl p-3 text-sm" oninput="update()">
+                    </div>
+                    <div>
+                        <span class="text-[10px] font-bold text-gray-400">レジ番号</span>
+                        <input type="text" id="regNo" value="#1" class="w-full border-gray-200 border rounded-xl p-3 text-sm" oninput="update()">
+                    </div>
+                </div>
             </section>
 
+            <!-- 商品リスト -->
             <section class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
                 <div class="flex items-center justify-between">
                     <label class="block text-sm font-bold text-gray-600">商品リスト</label>
@@ -146,12 +163,44 @@
                 <div id="itemList" class="space-y-3"></div>
             </section>
 
+            <!-- バーコード・QRコード設定 -->
             <section class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
-                <label class="block text-sm font-bold text-gray-600">フッター・その他</label>
-                <div>
-                    <span class="text-[10px] font-bold text-gray-400">Footer Message</span>
-                    <textarea id="footerMsg" class="w-full border-gray-200 border rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" oninput="update()" rows="2">ご来店ありがとうございました。</textarea>
+                <label class="block text-sm font-bold text-gray-600">コード設定（バーコード / QR）</label>
+                <div class="space-y-3">
+                    <div class="flex items-center gap-4">
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="showCode" checked onchange="update()" class="w-4 h-4">
+                            <span class="text-sm">コードを表示する</span>
+                        </label>
+                        <select id="codeType" onchange="update()" class="border rounded-lg p-1 text-sm bg-gray-50">
+                            <option value="barcode">バーコード</option>
+                            <option value="qr">QRコード</option>
+                        </select>
+                    </div>
+                    <div>
+                        <span class="text-[10px] font-bold text-gray-400">内容（URLや数字など）</span>
+                        <input type="text" id="codeContent" value="2101234567890" class="w-full border-gray-200 border rounded-xl p-3 text-sm" oninput="update()" placeholder="埋め込む内容">
+                    </div>
+                    <div id="barcodeTextContainer">
+                        <span class="text-[10px] font-bold text-gray-400">表示テキスト（バーコード下）</span>
+                        <input type="text" id="codeText" value="2101234567890" class="w-full border-gray-200 border rounded-xl p-3 text-sm" oninput="update()" placeholder="表示する文字">
+                    </div>
                 </div>
+            </section>
+
+            <!-- 合計下の詳細設定 -->
+            <section class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
+                <div class="flex items-center justify-between">
+                    <label class="block text-sm font-bold text-gray-600">合計下の詳細（支払い・釣り銭等）</label>
+                    <button onclick="addDetailRow()" class="bg-green-50 text-green-600 px-4 py-2 rounded-lg text-xs font-bold">+ 行追加</button>
+                </div>
+                <div id="detailRowsList" class="space-y-2"></div>
+            </section>
+
+            <!-- フッター -->
+            <section class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
+                <label class="block text-sm font-bold text-gray-600">フッターメッセージ</label>
+                <textarea id="footerMsg" class="w-full border-gray-200 border rounded-xl p-3 text-sm outline-none" oninput="update()" rows="2">ご来店ありがとうございました。</textarea>
             </section>
         </div>
 
@@ -165,18 +214,18 @@
                         <div id="logoWrapper" class="flex flex-col items-center justify-center">
                             <img id="viewLogoImg" class="hidden">
                         </div>
-                        <div id="viewShopName" class="text-lg font-bold"></div>
+                        <div id="viewShopName" class="text-lg font-bold leading-tight"></div>
                         <div id="viewBranchName" class="text-sm"></div>
                         <div id="viewAddress" class="text-[10px] mt-1 leading-tight px-4 whitespace-pre-wrap"></div>
                         <div class="flex justify-between mt-3 px-1 text-[11px]">
-                            <span id="viewTel">電話：03-1234-5678</span>
-                            <span id="viewReg">レジ #1</span>
+                            <span>電話：<span id="viewTel"></span></span>
+                            <span>レジ <span id="viewReg"></span></span>
                         </div>
                     </div>
 
                     <div class="flex justify-between px-1 mt-2 text-[11px]">
                         <span id="viewTimestamp"></span>
-                        <span>責: 001</span>
+                        <span>責: <span id="viewStaff"></span></span>
                     </div>
 
                     <div class="text-center">
@@ -193,26 +242,29 @@
                         <span id="viewTotal">¥0</span>
                     </div>
 
-                    <div id="viewBreakdown" class="mt-2 text-[10px] leading-tight text-gray-700"></div>
+                    <div id="viewDetailsContainer" class="mt-2 text-[12px] space-y-0.5"></div>
 
                     <div id="mcdOrderSection" class="hidden">
                         <div class="dotted-border"></div>
                         <div class="text-[10px] text-center">受付番号</div>
-                        <div class="order-number">128</div>
+                        <div id="viewOrderNo" class="order-number"></div>
                     </div>
 
                     <div id="viewFooterMsg" class="mt-4 text-[10px] text-center text-gray-700 whitespace-pre-wrap leading-relaxed"></div>
 
-                    <div id="barcodeSection" class="mt-6 flex flex-col items-center">
-                        <svg id="barcodeImage"></svg>
+                    <!-- コード表示セクション -->
+                    <div id="viewCodeSection" class="mt-6 flex flex-col items-center">
+                        <div id="barcodeContainer">
+                            <svg id="barcodeImage"></svg>
+                        </div>
+                        <div id="qrcodeImage" class="hidden p-2 bg-white"></div>
                     </div>
 
                     <div class="mt-4 border-t border-dotted border-gray-300"></div>
                 </div>
 
-                <div class="w-full space-y-3 px-4 lg:px-0">
+                <div class="w-full space-y-3 px-4 lg:px-0 pb-10">
                     <button onclick="saveImage()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                         レシートを画像で保存
                     </button>
                     <div id="imageOutput" class="w-full"></div>
@@ -221,6 +273,12 @@
         </div>
     </div>
 
+    <!-- 責任者番号入力用 (不可視、初期値管理) -->
+    <input type="hidden" id="staffNo" value="001">
+    <input type="hidden" id="receiptDate">
+    <input type="hidden" id="receiptTime">
+    <input type="hidden" id="orderNo" value="128">
+
     <script>
         let currentStyle = 'style-seven';
         let items = [
@@ -228,6 +286,13 @@
             { name: 'カフェラテ', price: 180, qty: 1, tax: 8 },
             { name: 'レジ袋', price: 3, qty: 1, tax: 10 }
         ];
+        
+        let detailRows = [
+            { label: 'nanaco支払', value: '¥333' },
+            { label: 'お釣り', value: '¥0' }
+        ];
+
+        let qrcodeInstance = null;
 
         function handleLogo(event) {
             const file = event.target.files[0];
@@ -269,6 +334,18 @@
             update();
         }
 
+        function addDetailRow() {
+            detailRows.push({ label: '項目名', value: '¥0' });
+            renderDetailInputs();
+            update();
+        }
+
+        function removeDetailRow(i) {
+            detailRows.splice(i, 1);
+            renderDetailInputs();
+            update();
+        }
+
         function renderInputs() {
             const list = document.getElementById('itemList');
             list.innerHTML = '';
@@ -292,15 +369,35 @@
             });
         }
 
+        function renderDetailInputs() {
+            const list = document.getElementById('detailRowsList');
+            list.innerHTML = '';
+            detailRows.forEach((row, i) => {
+                const div = document.createElement('div');
+                div.className = 'flex gap-2 bg-gray-50 p-2 rounded-xl border border-gray-100';
+                div.innerHTML = `
+                    <input type="text" value="${row.label}" class="w-1/2 p-2 text-xs border rounded-lg" oninput="detailRows[${i}].label=this.value;update()" placeholder="項目名">
+                    <input type="text" value="${row.value}" class="w-1/2 p-2 text-xs border rounded-lg text-right" oninput="detailRows[${i}].value=this.value;update()" placeholder="内容">
+                    <button onclick="removeDetailRow(${i})" class="text-red-400 px-2">×</button>
+                `;
+                list.appendChild(div);
+            });
+        }
+
         function update() {
             document.getElementById('viewShopName').innerText = document.getElementById('shopName').value;
             document.getElementById('viewBranchName').innerText = document.getElementById('branchName').value;
             document.getElementById('viewAddress').innerText = document.getElementById('address').value;
+            document.getElementById('viewTel').innerText = document.getElementById('telNumber').value;
+            document.getElementById('viewReg').innerText = document.getElementById('regNo').value;
+            document.getElementById('viewStaff').innerText = document.getElementById('staffNo').value;
+            document.getElementById('viewOrderNo').innerText = document.getElementById('orderNo').value;
             
-            const footerText = document.getElementById('footerMsg').value;
+            const now = new Date();
+            document.getElementById('viewTimestamp').innerText = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
             const footerEl = document.getElementById('viewFooterMsg');
-            footerEl.innerText = footerText;
-            footerEl.style.display = footerText.trim() === "" ? "none" : "block";
+            footerEl.innerText = document.getElementById('footerMsg').value;
 
             const itemsDiv = document.getElementById('viewItems');
             itemsDiv.innerHTML = '';
@@ -312,9 +409,7 @@
                 const mark = item.tax == 8 ? '*' : '';
                 line.innerHTML = `<span>${mark}${item.name}</span><span>¥${item.price.toLocaleString()}</span>`;
                 itemsDiv.appendChild(line);
-
-                if (item.tax == 8) sub8 += item.price;
-                else sub10 += item.price;
+                if (item.tax == 8) sub8 += item.price; else sub10 += item.price;
             });
 
             const tax8 = Math.floor(sub8 * 8 / 108);
@@ -327,72 +422,77 @@
             `;
             document.getElementById('viewTotal').innerText = `¥ ${total.toLocaleString()}`;
             
-            document.getElementById('mcdOrderSection').classList.toggle('hidden', currentStyle !== 'style-mcd');
-            
-            try {
-                JsBarcode("#barcodeImage", "2101234567890", {
-                    format: "CODE128",
-                    displayValue: true,
-                    height: 40,
-                    width: 1.5,
-                    margin: 0,
-                    background: "transparent"
-                });
-            } catch(e) {}
+            const detailsDiv = document.getElementById('viewDetailsContainer');
+            detailsDiv.innerHTML = '';
+            detailRows.forEach(row => {
+                const line = document.createElement('div');
+                line.className = 'flex-row-receipt px-1';
+                line.innerHTML = `<span>${row.label}</span><span>${row.value}</span>`;
+                detailsDiv.appendChild(line);
+            });
+
+            // コード表示更新
+            const showCode = document.getElementById('showCode').checked;
+            const codeType = document.getElementById('codeType').value;
+            const content = document.getElementById('codeContent').value;
+            const displayText = document.getElementById('codeText').value;
+
+            document.getElementById('viewCodeSection').classList.toggle('hidden', !showCode);
+            document.getElementById('barcodeContainer').classList.toggle('hidden', codeType !== 'barcode');
+            document.getElementById('qrcodeImage').classList.toggle('hidden', codeType !== 'qr');
+            document.getElementById('barcodeTextContainer').classList.toggle('hidden', codeType !== 'barcode');
+
+            if (showCode) {
+                if (codeType === 'barcode') {
+                    try {
+                        JsBarcode("#barcodeImage", content, {
+                            format: "CODE128",
+                            displayValue: true,
+                            text: displayText,
+                            height: 40,
+                            width: 1.5,
+                            margin: 0,
+                            fontSize: 12,
+                            background: "transparent"
+                        });
+                    } catch(e) {}
+                } else {
+                    const qrDiv = document.getElementById('qrcodeImage');
+                    qrDiv.innerHTML = "";
+                    new QRCode(qrDiv, {
+                        text: content,
+                        width: 100,
+                        height: 100,
+                        colorDark : "#000000",
+                        colorLight : "#ffffff",
+                        correctLevel : QRCode.CorrectLevel.H
+                    });
+                }
+            }
         }
 
         async function saveImage() {
             const target = document.getElementById('receipt');
             const output = document.getElementById('imageOutput');
-            output.innerHTML = '<p class="text-center text-xs text-gray-400 animate-pulse">高品質画像を生成中...</p>';
+            output.innerHTML = '<p class="text-center text-xs text-gray-400">生成中...</p>';
             
-            // フォントの読み込みを確実に待つ
-            if (document.fonts) {
-                await document.fonts.ready;
-            }
-
             try {
-                const canvas = await html2canvas(target, { 
-                    scale: 3, // 解像度を上げて文字のガタつきを防止
-                    useCORS: true,
-                    backgroundColor: "#ffffff",
-                    logging: false,
-                    // 文字ズレ補正のためのオプション
-                    letterRendering: true,
-                    allowTaint: true,
-                    onclone: (clonedDoc) => {
-                        // クローンされた要素で微調整が必要な場合はここで行う
-                        const clonedReceipt = clonedDoc.getElementById('receipt');
-                        clonedReceipt.style.boxShadow = 'none';
-                    }
-                });
-                
+                const canvas = await html2canvas(target, { scale: 3, useCORS: true, backgroundColor: "#ffffff" });
                 const data = canvas.toDataURL('image/png');
                 output.innerHTML = `
                     <div id="generatedImageContainer" class="bg-white p-2 rounded-xl border border-gray-200 mt-4 text-center">
-                        <p class="text-[10px] font-bold text-blue-500 mb-2">生成完了 (長押しで保存)</p>
-                        <img src="${data}" class="inline-block">
-                        <button onclick="downloadDirectly('${data}')" class="mt-2 block w-full text-[10px] text-gray-400 underline">直接ダウンロードを試みる</button>
+                        <img src="${data}" class="inline-block shadow-lg">
+                        <p class="text-[10px] mt-2 text-gray-400">画像を長押しで保存</p>
                     </div>
                 `;
             } catch (err) {
-                console.error(err);
-                output.innerHTML = '<p class="text-center text-xs text-red-500">画像生成に失敗しました</p>';
+                output.innerHTML = '<p class="text-red-500">失敗しました</p>';
             }
         }
 
-        function downloadDirectly(data) {
-            const link = document.createElement('a');
-            link.download = `receipt_${Date.now()}.png`;
-            link.href = data;
-            link.click();
-        }
-
         window.onload = () => {
-            const now = new Date();
-            const ts = `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日 ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
-            document.getElementById('viewTimestamp').innerText = ts;
             renderInputs();
+            renderDetailInputs();
             update();
         };
     </script>
